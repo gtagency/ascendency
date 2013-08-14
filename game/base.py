@@ -1,34 +1,44 @@
 import random
 
-from .effects import effects
+from effects import effects
 
 class NoCardException(BaseException): pass
 class ActionException(BaseException): pass
 class SetupException(BaseException): pass
 
-class GameState(object):
+class Game(object):
 
     def __init__(self, cards, player_count, initial_deck):
-        self.cards = []
+        self.piles = cards
         self.trash = []
-
-        for card in cards.keys():
-            self.cards.extend([card] * cards[card])
-
         self.players = [Player(self, initial_deck) for i in range(player_count)]
 
     def take_card(self, name):
-        for card in self.cards:
+        for card in self.piles:
             if card.name == name:
-                self.cards.remove(card)
-                return card
+                if self.piles[card] > 0:
+                    self.piles[card] -= 1
+                    return card
         raise NoCardException
 
     def return_card(self, card):
-        self.cards.append(card)
+        if card in self.piles:
+            self.piles[card] += 1
+        else:
+            self.piles[card] = 1
 
     def trash_card(self, card):
         self.trash.append(card)
+
+    @property
+    def is_finished(self):
+        if len([card for card in self.piles if self.piles[card] == 0) >= 3:
+            return True
+        else:
+            return False
+
+def make_game(cards, player_count, initial_deck):
+    return Game(cards, player_count, initial_deck)
 
 class Player(object):
 
@@ -46,7 +56,7 @@ class Player(object):
         self.current_buys = 0
 
         # set up initial deck
-        for card_name in inital_deck:
+        for card_name in initial_deck:
             try:
                 self.deck.append(self._game.take_card(card_name))
             except NoCardException:
@@ -75,7 +85,7 @@ class Player(object):
 
     @property
     def can_do_action(self):
-        return (self.current_actions > 0)
+        return (self.current_actions > 0) and any(card.is_action for card in self.hand)
 
     def do_action(self, card_name):
         for card in self.hand:
@@ -122,7 +132,7 @@ class Card(object):
         self.type = type
         self.name = name
         self.price = price
-        self.is_action = (effects is None)
+        self.is_action = (effects is not None)
         self.treasure = treasure
         self.victory_pts = victory_pts
         self.effects = effects

@@ -71,3 +71,8 @@ effects = {
     },
 
 }
+
+def register_effect(name, check, perform):
+    if check is None:
+        check = null_check
+    effects[name] = { 'check' : check, 'perform' : perform }
