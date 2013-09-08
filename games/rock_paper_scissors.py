@@ -4,33 +4,35 @@ import json
 import time
 import sys
 
-import requests
+import game_base
 
-match_url = sys.argv[1]
-key = sys.argv[2]
+class RockPaperScissorsGame(game_base.GameBase):
+    
+    def on_start(self):
+        self.send_request_multicast({ player: 'pick' for player in self.players })
 
-def send_message(request, **kw):
-    kw['request'] = request
-    kw['key'] = key
-    global _event
-    _event = requests.post(
-        match_url, 
-        data=json.dumps(kw), 
-        headers={'content-type':'application/json'}).json()
+    def on_request_complete(self, replies):
+        p1 = self.players[0]
+        p2 = self.players[1]
 
-def recv_message():
-    return _event
+        if replies[p1] not in ['rock', 'paper', 'scissors']:
+            self.send_game_over({ p1: 0, p2: 1 })
+        if replies[p2] not in ['rock', 'paper', 'scissors']:
+            self.send_game_over({ p1: 1, p2: 0 })
 
-send_message('join_as_game')
+        r1 = ['rock', 'paper', 'scissors'].index(replies[p1])
+        r2 = ['rock', 'paper', 'scissors'].index(replies[p2])
 
-join_info = recv_message()
-config = join_info['config']
-players = join_info['players']
+        score_matrix = [
+            [(0.5, 0.5), (0.0, 1.0), (1.0, 0.0)],
+            [(1.0, 0.0), (0.5, 0.5), (0.0, 1.0)],
+            [(0.0, 0.1), (1.0, 0.0), (0.5, 0.5)]
+        ]
 
-send_message('request', timeout=1.0, messages={ player: 'pick' for player in players })
+        result = score_matrix[r1][r2]
+        self.send_game_over({ p1: result[0], p2: result[1] })
 
-reply = recv_message()
-if reply['event'] == 'request_complete':
-    send_message('game_over', results={ player: 0 for player in players })
-elif reply['event'] == 'request_timeout':
-    send_message('game_over', results={ player: 0 for player in players })
+    def on_request_timeout(self, replies):
+        self.send_request_continue(timeout=0.1)
+
+RockPaperScissorsGame(sys.argv[1], sys.argv[2])

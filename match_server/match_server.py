@@ -1,3 +1,6 @@
+
+import datetime
+import random
 import base64
 import json
 import time
@@ -17,6 +20,9 @@ class AuthError(BaseException):
     pass
 
 class StateError(BaseException):
+    pass
+
+def log_event(match_id, agent_key, event, content):
     pass
 
 class Match(object):
@@ -42,6 +48,7 @@ class Match(object):
         self.join_count += 1
         if self.join_count == self.join_target:
             self._join_complete()
+        self._log_event(key, 'join_as_game', '')
 
     def join(self, callback, key):
         if key not in self.player_keys:
@@ -50,6 +57,7 @@ class Match(object):
         self.join_count += 1
         if self.join_count == self.join_target:
             self._join_complete()
+        self._log_event(key, 'join', '')
 
     def _join_complete(self):
         self.game_callback(json.dumps({
@@ -66,39 +74,76 @@ class Match(object):
         self.game_callback = callback
         for player in messages:
             self.player_callbacks[player](json.dumps(messages[player]))
+            self.player_callbacks[player] = None
         self.replies = { player: None for player in messages }
-        # TODO timeout
+        self.reply_timeout = tornado.ioloop.IOLoop.instance().add_timeout(
+            datetime.timedelta(seconds=timeout), self._request_timeout)
+        if len(self.replies) == 0:
+            self._request_complete()
+        self._log_event(key, 'request', json.dumps({'timeout': timeout, 'messages': messages}))
 
     def reply(self, callback, key, message):
-        if self.replies is None:
+        if self.replies is None or message is None:
             raise StateError
         if key not in self.player_keys:
             raise AuthError
         self.player_callbacks[key] = callback
         self.replies[key] = message
-
-        if all(message is not None for message in self.replies.values()):
+        if self.game_callback is not None and \
+            all(message is not None for message in self.replies.values()):
             self._request_complete()
+        self._log_event(key, 'reply', json.dumps(message))
 
     def _request_complete(self):
+        if self.reply_timeout is not None:
+            tornado.ioloop.IOLoop.instance().remove_timeout(self.reply_timeout)
+        self.reply_timeout = None
         self.game_callback(json.dumps({
             'event' : 'request_complete',
             'replies' : self.replies,
         }))
+        self.game_callback = None
         self.replies = None
+        self._collect_logs()
+
+    def _request_timeout(self):
+        self.reply_timeout = None
+        self.game_callback(json.dumps({
+            'event' : 'request_timeout',
+            'replies' : self.replies,
+        }))
+        self.game_callback = None
+
+    def request_continue(self, callback, key, timeout):
+        if key != self.game_key:
+            raise AuthError
+        self.game_callback = callback
+        if all(message is not None for message in self.replies.values()):
+            self._request_complete()
+        else:
+            self.reply_timeout = tornado.ioloop.IOLoop.instance().add_timeout(
+                datetime.timedelta(seconds=timeout), self._request_timeout)
+        self._log_event(key, 'continue', json.dumps({'timeout':timeout}))
 
     def game_over(self, callback, key, results):
         if key != self.game_key:
             raise AuthError
+        self._collect_logs()
         for sandbox in self.sandboxes.values():
             sandbox.teardown()
+        self._log_event(key, 'game_over', json.dumps(results))
 
     def _collect_logs(self):
         logs = {}
         for key in self.sandboxes:
-            logs[key] = self.sandboxes[key].collect_log()
-            if len(logs[key]) > 0:
-                print '%.5f' % time.time(), 'G' if key == self.game_key else 'P', key, '(stderr)', json.dumps(logs[key])
+            log = self.sandboxes[key].collect_log()
+            if len(log) > 0:
+                self._log_event(key, 'stderr', log)
+
+    def _log_event(self, agent_key, event, content):
+        if event == 'game_over':
+            print '%s results %s' % (self.match_id, content)
+        pass
 
 def generate_key():
     return base64.urlsafe_b64encode(os.urandom(9))
@@ -118,7 +163,6 @@ def create_match(match_id, game_filename, agent_filenames, game_config={}):
     matches[match_id] = Match(match_id, game_key, agent_keys, game_config, sandboxes)
     for key in sandboxes:
         sandboxes[key].start(args=[match_url, key])
-    print 'created match %s' % match_id
 
 class MatchHandler(tornado.web.RequestHandler):
 
@@ -128,16 +172,20 @@ class MatchHandler(tornado.web.RequestHandler):
             raise tornado.web.HTTPError(404)
         match = matches[match_id]
 
-        message = json.loads(self.request.body)
+        try:
+            message = json.loads(self.request.body)
+        except ValueError:
+            raise tornado.web.HTTPError(400)
+
         try:
             request = message['request']
             key = message['key']
-            match._collect_logs()
-            print '%.5f' % time.time(), 'G' if key == match.game_key else 'P', key, request, self.request.body
             if request == 'request':
                 match.request(self.on_response, key, message['timeout'], message['messages'])
             elif request == 'reply':
                 match.reply(self.on_response, key, message['message'])
+            elif request == 'continue':
+                match.request_continue(self.on_response, key, message['timeout'])
             elif request == 'join':
                 match.join(self.on_response, key)
             elif request == 'join_as_game':
@@ -159,14 +207,19 @@ class MatchHandler(tornado.web.RequestHandler):
         self.finish()
 
 routes = [
-    (r'/([-_a-zA-Z0-9]{12})', MatchHandler),
+    (r'/([-_a-zA-Z0-9]+)', MatchHandler),
 ]
 
-if __name__ == '__main__':
+def _create_test_matches():
+    for i in range(100):
+        create_match(generate_key(), '../games/rock_paper_scissors.py',
+            ['../agents/rock_paper_scissors.py'] * 2
+        )
 
-    create_match(generate_key(), '../games/rock_paper_scissors.py',
-        ['../agents/rock_paper_scissors.py'] * 2
-    )
+if __name__ == '__main__':
+    
+    tornado.ioloop.IOLoop.instance().add_timeout(
+        datetime.timedelta(seconds=2), _create_test_matches)
 
     app = tornado.web.Application(routes)
     app.listen(4201)

@@ -18,7 +18,9 @@ class SandboxedAgent(object):
         self._agent_process = subprocess.Popen(
             [self.filename] + args,
             bufsize=1,
+            stdin=open(os.devnull, 'r'),
             stderr=subprocess.PIPE,
+            stdout=open(os.devnull, 'w'),
             close_fds=True)
         self._log_queue = queue.Queue()
         self._log_thread = threading.Thread(

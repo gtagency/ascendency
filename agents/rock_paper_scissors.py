@@ -2,6 +2,7 @@
 
 import random
 import json
+import time
 import sys
 
 import requests
@@ -22,4 +23,5 @@ def recv_message():
     return _event
 
 send_message('join')
+time.sleep(0.95)
 send_message('reply', message=['rock', 'paper', 'scissors'][random.randint(0, 2)])
