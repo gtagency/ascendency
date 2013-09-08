@@ -12,6 +12,7 @@ class Game(object):
         self.piles = cards
         self.trash = []
         self.players = [Player(self, initial_deck) for i in range(player_count)]
+        self.active_player = 0
 
     def take_card(self, name):
         for card in self.piles:
@@ -171,7 +172,7 @@ class Card(object):
             'name' : self.name,
             'price' : self.price,
             'treasure' : self.treasure,
-            'victory_pts' : self.victory_pts,
+            'victory_points' : self.victory_pts,
             'effects' : self.effects
         }
 
