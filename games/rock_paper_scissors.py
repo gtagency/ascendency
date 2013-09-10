@@ -9,7 +9,10 @@ import game_base
 class RockPaperScissorsGame(game_base.GameBase):
     
     def on_start(self):
-        self.send_request_multicast({ player: 'pick' for player in self.players })
+        self.send_request_multicast({
+            player: {'state':None,'moves':['rock','paper','scissors']}
+            for player in self.players
+        })
 
     def on_request_complete(self, replies):
         p1 = self.players[0]

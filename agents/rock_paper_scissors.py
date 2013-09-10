@@ -10,18 +10,23 @@ import requests
 match_url = sys.argv[1]
 key = sys.argv[2]
 
-def send_message(request, **kw):
-    kw['request'] = request
-    kw['key'] = key
+def send_message(message):
     global _event
     _event = requests.post(
-        match_url, 
-        data=json.dumps(kw), 
+        match_url,
+        data=json.dumps({'key':key, 'message':message}),
         headers={'content-type':'application/json'}).json()
 
 def recv_message():
     return _event
 
-send_message('join')
-time.sleep(0.95)
-send_message('reply', message=['rock', 'paper', 'scissors'][random.randint(0, 2)])
+send_message({'join':True})
+
+while True:
+    msg = recv_message()
+    if 'moves' in msg:
+        moves = msg['moves']
+        move = moves[random.randint(0, len(moves)-1)]
+        send_message({'move':move})
+    else:
+        send_message(None)

@@ -11,34 +11,35 @@ class GameBase(object):
         self.url = url
         self.key = key
 
-        self.send_message('join_as_game')
-        join_info = self.recv_message()
-        self.config = join_info['config']
-        self.players = join_info['players']
+        self.send_message({'$activate':True})
+
+        m = self.recv_message()
+        self.config, self.players = m['config'], m['players']
 
         self.on_start()
 
         while True:
             try:
-                event = self.recv_message()
-                if event['event'] == 'request_complete':
-                    self.on_request_complete(event['replies'])
-                elif event['event'] == 'request_timeout':
-                    self.on_request_timeout(event['replies'])
+                msg = self.recv_message()
+                if '$timed_out' in msg:
+                    del msg['$timed_out']
+                    self.on_request_timeout(msg)
+                else:
+                    self.on_request_complete(msg)
             except ValueError as e:
                 self.on_error(int(str(e)))
 
     def send_request_multicast(self, messages, timeout=1.0):
-        self.send_message('request', timeout=timeout, messages=messages)
+        self.send_message(messages, timeout=timeout)
 
     def send_request(self, player, message, timeout=1.0):
-        self.send_request_multicast(timeout=timeout, messages={player:message})
+        self.send_message({player:message}, timeout=timeout)
 
     def send_request_continue(self, timeout=1.0):
         self.send_message('continue', timeout=timeout)
 
     def send_game_over(self, results):
-        self.send_message('game_over', results=results)
+        self.send_message({'$results':results})
 
     def log(self, data):
         sys.stderr.write(json.dumps(data))
@@ -56,15 +57,13 @@ class GameBase(object):
     def on_error(self, status):
         pass
 
-    def send_message(self, request, **kw):
-        kw['request'] = request
-        kw['key'] = self.key
-        self._response = requests.post(self.url, data=json.dumps(kw), 
+    def send_message(self, message, timeout=None):
+        self._response = requests.post(self.url, 
+            data=json.dumps({'key' : self.key, 'message' : message, 'timeout' : timeout}),
             headers={'content-type':'application/json'})
 
     def recv_message(self):
         try:
-            sys.stderr.write(self._response.text)
             return self._response.json()
         except ValueError:
             raise ValueError, '%d' % self._response.status_code

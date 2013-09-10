@@ -1,18 +1,19 @@
 
-import Queue as queue
 import subprocess
 import threading
+import datetime
+import json
+import time
 import os
 
-def enqueue_output(out, queue):
-    for line in iter(out.readline, b''):
-        queue.put(line)
-    out.close()
+import tornado.ioloop
 
 class SandboxedAgent(object):
 
-    def __init__(self, filename):
+    def __init__(self, filename, match_id, key):
         self.filename = filename
+        self.match_id = match_id
+        self.key = key
 
     def start(self, args=[]):
         self._agent_process = subprocess.Popen(
@@ -22,19 +23,18 @@ class SandboxedAgent(object):
             stderr=subprocess.PIPE,
             stdout=open(os.devnull, 'w'),
             close_fds=True)
-        self._log_queue = queue.Queue()
         self._log_thread = threading.Thread(
-            target=enqueue_output,
-            args=(self._agent_process.stderr, self._log_queue))
+            target=self.enqueue_output,
+            args=(self._agent_process.stderr,))
         self._log_thread.start()
 
-    def collect_log(self):
-        lines = []
-        try:
-            while True:
-                lines.append(self._log_queue.get_nowait())
-        except queue.Empty:
-            return ''.join(lines)
+    def enqueue_output(self, out):
+        for line in iter(out.readline, b''):
+            tornado.ioloop.IOLoop.instance().add_callback(self.log_log, str(datetime.datetime.now()), line)
+        out.close()
+
+    def log_log(self, timestamp, line):
+        print json.dumps(['LOG', timestamp, self.match_id, self.key, line])
 
     def teardown(self):
         self._agent_process.kill()
