@@ -107,14 +107,23 @@ class GameMailbox(object):
             self.timeout = tornado.ioloop.IOLoop.instance().add_timeout(
                 datetime.timedelta(seconds=timeout), self._timeout)
 
-    def _timeout(self):
-        if self.callback is None:
+    def refresh_timeout(self, callback, timeout=None):
+        if self.callback is not None:
+            raise MultipleRequest
+        if self.replies is None:
+            raise InvalidRequest
+        if self.timeout is not None:
+            tornado.ioloop.IOLoop.instance().remove_timeout(self.timeout)
             self.timeout = None
-            self.replies = None
-            return
+        self.callback = callback
+        if timeout is not None:
+            self.timeout = tornado.ioloop.IOLoop.instance().add_timeout(
+                datetime.timedelta(seconds=timeout), self._timeout)
+
+    def _timeout(self):
         self.timeout = None
         callback, self.callback = self.callback, None
-        replies, self.replies = self.replies, None
+        replies = dict(self.replies)
         replies['$timed_out'] = True
         callback(replies)
 
@@ -151,9 +160,18 @@ class Match(object):
                 self.init_mailbox.send(self.game)
                 self.init_mailbox.fetch(lambda: self._join_complete(callback))
             elif '$results' in message:
+                results = message['$results']
+                if len(results.keys()) != len(self.players):
+                    raise InvalidRequest
+                for player in results:
+                    if player not in self.players:
+                        raise InvalidRequest
                 for sandbox in self.sandboxes.values():
                     sandbox.teardown()
                 matches[self.match_id] = None
+                print json.dumps(['END', str(datetime.datetime.now()), self.match_id, results])
+            elif '$refresh' in message:
+                self.game_mailbox.refresh_timeout(callback, timeout=timeout)
             else:
                 for player in message:
                     if player not in self.players:
@@ -244,15 +262,14 @@ def _create_test_matches():
         ['../agents/rock_paper_scissors.py'] * 2
     )
 
-    tornado.ioloop.IOLoop.instance().add_timeout(
-        datetime.timedelta(seconds=0.1), _create_test_matches)
-
 if __name__ == '__main__':
     
     print json.dumps(['INI', str(datetime.datetime.now())])
 
-    tornado.ioloop.IOLoop.instance().add_timeout(
-        datetime.timedelta(seconds=1), _create_test_matches)
+    tornado.ioloop.IOLoop.instance().add_timeout(0.1, _create_test_matches)
+
+#    tester = tornado.ioloop.PeriodicCallback(_create_test_matches, 0.1)
+#    tester.start()
 
     app = tornado.web.Application(routes)
     app.listen(4201)

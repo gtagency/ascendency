@@ -36,7 +36,7 @@ class GameBase(object):
         self.send_message({player:message}, timeout=timeout)
 
     def send_request_continue(self, timeout=1.0):
-        self.send_message('continue', timeout=timeout)
+        self.send_message({'$refresh':True}, timeout=timeout)
 
     def send_game_over(self, results):
         self.send_message({'$results':results})

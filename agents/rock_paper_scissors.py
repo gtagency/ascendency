@@ -25,8 +25,7 @@ send_message({'join':True})
 while True:
     msg = recv_message()
     if 'moves' in msg:
+        time.sleep(2)
         moves = msg['moves']
         move = moves[random.randint(0, len(moves)-1)]
         send_message({'move':move})
-    else:
-        send_message(None)
