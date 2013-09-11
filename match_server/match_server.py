@@ -93,19 +93,24 @@ class GameMailbox(object):
             if self.timeout is not None:
                 tornado.ioloop.IOLoop.instance().remove_timeout(self.timeout)
                 self.timeout = None
-            callback, self.callback = self.callback, None
-            replies, self.replies = self.replies, None
-            callback(replies)
+            if self.callback is not None:
+                callback, self.callback = self.callback, None
+                replies, self.replies = self.replies, None
+                callback(replies)
 
     def fetch(self, players, callback, timeout=None):
         if self.callback is not None:
             raise MultipleRequest
-        self.replies = { player: None for player in players }
-        self.replies_remaining = len(players)
-        self.callback = callback
-        if timeout is not None:
-            self.timeout = tornado.ioloop.IOLoop.instance().add_timeout(
-                datetime.timedelta(seconds=timeout), self._timeout)
+        if self.replies is not None:
+            replies, self.replies = self.replies, None
+            callback(replies)
+        else:
+            self.replies = { player: None for player in players }
+            self.replies_remaining = len(players)
+            self.callback = callback
+            if timeout is not None:
+                self.timeout = tornado.ioloop.IOLoop.instance().add_timeout(
+                    datetime.timedelta(seconds=timeout), self._timeout)
 
     def refresh_timeout(self, callback, timeout=None):
         if self.callback is not None:
@@ -266,10 +271,10 @@ if __name__ == '__main__':
     
     print json.dumps(['INI', str(datetime.datetime.now())])
 
-    tornado.ioloop.IOLoop.instance().add_timeout(0.1, _create_test_matches)
+#    tornado.ioloop.IOLoop.instance().add_timeout(0.1, _create_test_matches)
 
-#    tester = tornado.ioloop.PeriodicCallback(_create_test_matches, 0.1)
-#    tester.start()
+    tester = tornado.ioloop.PeriodicCallback(_create_test_matches, 0.1)
+    tester.start()
 
     app = tornado.web.Application(routes)
     app.listen(4201)
