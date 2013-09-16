@@ -9,7 +9,47 @@ ioloop = tornado.ioloop.IOLoop.instance()
 
 match_servers = []
 
-class MatchTracker(object):
+class Scheduler(object):
+
+    worker_queue = []
+    task_queue = []
+
+    @classmethod
+    def add_worker(cls, worker):
+        if len(cls.task_queue) > 0:
+            match = cls.task_queue.pop(0)
+            worker.assign_match(match)
+        else:
+            cls.worker_queue.append(worker)
+
+    @classmethod
+    def schedule(cls, match):
+        if len(cls.worker_queue) > 0:
+            worker = cls.worker_queue.pop(0)
+            worker.assign_match(match)
+        else:
+            cls.task_queue.append(match)
+
+class MatchWorker(object):
+
+    def __init__(self, match_server):
+        self.match_server = match_server
+        self.busy = False
+        self.match = None
+        Scheduler.add_worker(self)
+
+    def assign_match(self, match):
+        self.match = match
+        self.busy = True
+        self.match.start(self)
+        self.match_server.schedule_match(match, self)
+
+    def free(self):
+        self.match = None
+        self.busy = False
+        Scheduler.add_worker(self)
+
+class MatchTask(object):
 
     def __init__(self, game, players, config):
         self.game = game
@@ -18,8 +58,9 @@ class MatchTracker(object):
         self.state = 'scheduling'
         self.logs = []
 
-    def start(self, match_server_hostname):
-        self.match_server_hostname = match_server_hostname
+    def start(self, worker):
+        self.match_server_hostname = worker.match_server.hostname
+        self.worker = worker
         self.state = 'starting'
 
     def log(self, log):
@@ -34,9 +75,13 @@ class MatchTracker(object):
     def finish(self, results):
         self.results = results
         self.state = 'finished'
+        self.worker.free()
+        self.worker = None
 
     def redo(self):
         self.logs = []
+        self.worker.free()
+        self.worker = None
         self.state = 'scheduling'
 
     @property
@@ -84,9 +129,8 @@ class MatchServer(object):
 
     def __init__(self, socket):
         self.socket = socket
-        self.free_workers = 0
-        self.worker_count = 0
-        self.active_matches = {}
+        self.workers = []
+        self.matches = {}
         self.ready = False
 
     def __lt__(self, other):
@@ -102,8 +146,8 @@ class MatchServer(object):
             self.diskspace = message[3]
             self.send({'$configure':{'workers':4}})
         elif message[0] == 'CFG':
-            self.worker_count = message[2]['workers']
-            self.free_workers = self.worker_count
+            for i in range(message[2]['workers']):
+                self.workers.append(MatchWorker(self))
             self.ready = True
         elif message[0] == 'END':
             match_id = message[2]
@@ -117,14 +161,18 @@ class MatchServer(object):
             matches[match_id].log(message)
 
     def on_close(self):
-        for match in self.active_matches.values():
+        for match in self.matches.values():
             match.redo()
         self.active_matches = {}
 
-    def schedule_match(self, match_id, config):
-        self.free_workers -= 1
-        self.send({'$schedule':{'match_id':match_id,'config':config}})
-        self.active_matches
+    def schedule_match(self, match, worker):
+        self.send({'$schedule':{
+            'match_id': match.match_id,
+            'game': match.game,
+            'players': match.players,
+            'config': match.config
+            }})
+        self.matches[match.match_id] = match
 
 #
 # Tornado HTTP server
@@ -208,11 +256,9 @@ routes = [
     (r'/matches/([-_a-zA-Z0-9]+)/logs', MatchLogListener),
 ]
 
-def schedule_match(game, players):
-    pass
-
 if __name__ == '__main__':
-    schedule_match('rock_paper_scissors', ['rock_paper_scissors'] * 2)
+
+    Scheduler.schedule(MatchTask('rock_paper_scissors', ['rock_paper_scissors'] * 2, {}))
 
     app = tornado.web.Application(routes)
     app.listen(4200)
