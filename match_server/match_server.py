@@ -251,7 +251,7 @@ class Match(object):
                 for sandbox in self.sandboxes.values():
                     sandbox.teardown()
                 matches[self.match_id] = None
-                print json.dumps(['END', str(datetime.datetime.now()), self.match_id, results])
+                log_end_match(self.match_id, results)
             elif '$refresh' in message:
                 self.game_mailbox.refresh_timeout(callback, timeout=timeout)
             else:
@@ -327,6 +327,7 @@ def generate_match_id():
     return base64.urlsafe_b64encode(random_bytes(6))
 
 def create_match(match_id, game_filename, game_key, agent_filenames, agent_keys, game_config={}):
+    print 'create match ' + game_filename + ' ' + ' '.join(agent_filenames)
     sandboxes = {}
     agent_keys = []
     match_url = 'http://localhost:%d/%s' % (bound_port, match_id)
@@ -373,9 +374,19 @@ def _scheduler_handler(future):
         if '$configure' in message:
             print 'reconfiguring:'
             for key in message['$configure']:
+                log_config(message['$configure']['workers'])
                 print '\t%s : %s' % (json.dumps(key), json.dumps(message['$configure'][key]))
         if '$schedule' in message:
             print 'scheduling match %s' % json.dumps(message['$schedule'])
+
+            init = message['$schedule']
+            create_match(
+                init['match_id'],
+                '../games/%s.py' % init['game'],
+                generate_key(),
+                [ '../agents/%s/%s.py' % (init['game'], player) for player in init['players'] ],
+                [ generate_key() for player in init['players'] ]
+            )
 
         connection.read_message(callback=pull_loop)
     connection.read_message(callback=pull_loop)

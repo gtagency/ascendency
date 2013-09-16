@@ -1,5 +1,7 @@
 
+import base64
 import json
+import os
 
 import tornado.websocket
 import tornado.ioloop
@@ -23,7 +25,12 @@ class Scheduler(object):
             cls.worker_queue.append(worker)
 
     @classmethod
+    def remove_worker(cls, worker):
+        cls.worker_queue.remove(worker)
+
+    @classmethod
     def schedule(cls, match):
+        print 'scheduling ' + match.match_id
         if len(cls.worker_queue) > 0:
             worker = cls.worker_queue.pop(0)
             worker.assign_match(match)
@@ -39,19 +46,26 @@ class MatchWorker(object):
         Scheduler.add_worker(self)
 
     def assign_match(self, match):
+        print 'worker assigned match ' + match.match_id
         self.match = match
         self.busy = True
         self.match.start(self)
         self.match_server.schedule_match(match, self)
 
     def free(self):
-        self.match = None
-        self.busy = False
-        Scheduler.add_worker(self)
+        if self.busy:
+            self.match_server.remove_match(self.match.match_id)
+            self.match = None
+            self.busy = False
+            Scheduler.add_worker(self)
 
 class MatchTask(object):
 
-    def __init__(self, game, players, config):
+    index = {}
+
+    def __init__(self, match_id, game, players, config):
+        MatchTask.index[match_id] = self
+        self.match_id = match_id
         self.game = game
         self.players = players
         self.config = config
@@ -73,6 +87,7 @@ class MatchTask(object):
         self.state = 'running'
 
     def finish(self, results):
+        print '%s finished with %s' % (self.match_id, json.dumps(results))
         self.results = results
         self.state = 'finished'
         self.worker.free()
@@ -129,6 +144,7 @@ class MatchServer(object):
 
     def __init__(self, socket):
         self.socket = socket
+        self.hostname = self.socket.request.remote_ip
         self.workers = []
         self.matches = {}
         self.ready = False
@@ -152,18 +168,23 @@ class MatchServer(object):
         elif message[0] == 'END':
             match_id = message[2]
             results = message[3]
-            self.active_matches[match_id].finish(results)
-            self.free_workers += 1
+            self.matches[match_id].finish(results)
         elif message[0] == 'FIN':
             self.on_close()
         else:
             match_id = message[2]
-            matches[match_id].log(message)
+            if match_id in self.matches:
+                self.matches[match_id].log(message)
 
     def on_close(self):
+        for worker in self.workers:
+            worker.busy = False
         for match in self.matches.values():
             match.redo()
         self.active_matches = {}
+
+    def remove_match(self, match_id):
+        del self.matches[match_id]
 
     def schedule_match(self, match, worker):
         self.send({'$schedule':{
@@ -196,13 +217,13 @@ class MatchServerIndexHandler(tornado.web.RequestHandler):
 
     def get(self):
         self.set_header('content-type', 'application/json')
-        self.write(json.dumps([server.hostname for server in match_servers]))
+        self.write(json.dumps({ server.hostname: [worker.busy for worker in server.workers] for server in match_servers}))
 
 class MatchIndexHandler(tornado.web.RequestHandler):
     
     def get(self):
         self.set_header('content-type', 'application/json')
-        self.write(json.dumps(list(matches.keys())))
+        self.write(json.dumps(list(MatchTask.index.keys())))
 
 class MatchRootHandler(tornado.web.RequestHandler):
     
@@ -256,9 +277,13 @@ routes = [
     (r'/matches/([-_a-zA-Z0-9]+)/logs', MatchLogListener),
 ]
 
+def schedule_test():
+    if Scheduler.task_queue == []:
+        Scheduler.schedule(MatchTask(base64.urlsafe_b64encode(os.urandom(6)), 'rock_paper_scissors', ['a'] * 2, {}))
+
 if __name__ == '__main__':
 
-    Scheduler.schedule(MatchTask('rock_paper_scissors', ['rock_paper_scissors'] * 2, {}))
+    tornado.ioloop.PeriodicCallback(schedule_test, 100).start()
 
     app = tornado.web.Application(routes)
     app.listen(4200)
