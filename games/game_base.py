@@ -67,3 +67,33 @@ class GameBase(object):
             return self._response.json()
         except ValueError:
             raise ValueError, '%d' % self._response.status_code
+
+class GameStrategy(object):
+
+    def __init__(self, config):
+        raise NotImplementedError, '__init__'
+
+    def state(self, player):
+        raise NotImplementedError, 'state'
+
+    def valid_moves(self, player):
+        raise NotImplementedError, 'valid_moves'
+
+    def move_timeout(self):
+        return None
+
+    def apply_moves(self, moves):
+        raise NotImplementedError, 'apply_moves'
+
+    def results(self, player):
+        raise NotImplementedError, 
+
+def run_game(url, match_id, game_strategy):
+    
+    def send_message(message, timeout=None):
+        
+
+    send_message({'$activate':True})
+
+    m = recv_message()
+

@@ -1,5 +1,6 @@
 
 import datetime
+import socket
 import random
 import base64
 import json
@@ -9,13 +10,81 @@ import os
 
 import tornado.httpclient
 import tornado.websocket
+import tornado.testing
 import tornado.ioloop
 import tornado.gen
 import tornado.web
 
+ioloop = tornado.ioloop.IOLoop.instance()
+
 import sandbox
 
+#
+# Logging facilities
+#
+
+class LogMailbox(object):
+
+    def __init__(self):
+        self.logs = []
+        self.callback = None
+
+    def send(self, message):
+        if self.callback is not None:
+            callback, self.callback = self.callback, None
+            ioloop.add_callback(callback, message)
+        else:
+            self.logs.append(message)
+
+    def fetch(self, callback):
+        if len(self.logs) == 0:
+            self.callback = callback
+        else:
+            logs, self.logs = self.logs, []
+            for log in logs:
+                ioloop.add_callback(callback, log)
+
+_log_mailbox = LogMailbox()
+
+def _log(event, *rest, **kwargs):
+    timestamp = kwargs.pop('timestamp', None)
+    if timestamp is None:
+        timestamp = datetime.datetime.now().isoformat()
+    else:
+        timestamp = timestamp.isoformat()
+    _log_mailbox.send([event, timestamp] + list(rest))
+
+def log_init(timestamp=None, memory=1024, diskspace=1048576):
+    print 'match server starting advertising %d MB RAM, %d MB diskspace' % (memory, diskspace)
+    _log('INI', memory, diskspace, timestamp=None)
+
+def log_config(workers, timestamp=None):
+    _log('CFG', {'workers':workers}, timestamp=timestamp)
+
+def log_new_match(match_id, game_key, player_keys, game_config, timestamp=None):
+    _log('NEW', match_id, game_key, player_keys, game_config, timestamp=timestamp)
+
+def log_send(match_id, key, data, timestamp=None):
+    _log('<--', match_id, key, data, timestamp=timestamp)
+
+def log_recv(match_id, key, data, timestamp=None):
+    _log('-->', match_id, key, data, timestamp=timestamp)
+
+def log_end_match(match_id, results, timestamp=None):
+    _log('END', match_id, results, timestamp=timestamp)
+
+def log_finish(timestamp=None):
+    _log('FIN', timestamp=None)
+
+#
+# Currently-active matches
+#
+
 matches = {}
+
+#
+# Error types
+#
 
 class AuthError(BaseException):
     pass
@@ -25,6 +94,10 @@ class MultipleRequest(BaseException):
 
 class InvalidRequest(BaseException):
     pass
+
+#
+# Mailboxes for message passing
+#
 
 class InitMailbox(object):
 
@@ -91,7 +164,7 @@ class GameMailbox(object):
         self.replies_remaining -= 1
         if self.replies_remaining == 0:
             if self.timeout is not None:
-                tornado.ioloop.IOLoop.instance().remove_timeout(self.timeout)
+                ioloop.remove_timeout(self.timeout)
                 self.timeout = None
             if self.callback is not None:
                 callback, self.callback = self.callback, None
@@ -109,7 +182,7 @@ class GameMailbox(object):
             self.replies_remaining = len(players)
             self.callback = callback
             if timeout is not None:
-                self.timeout = tornado.ioloop.IOLoop.instance().add_timeout(
+                self.timeout = ioloop.add_timeout(
                     datetime.timedelta(seconds=timeout), self._timeout)
 
     def refresh_timeout(self, callback, timeout=None):
@@ -118,11 +191,11 @@ class GameMailbox(object):
         if self.replies is None:
             raise InvalidRequest
         if self.timeout is not None:
-            tornado.ioloop.IOLoop.instance().remove_timeout(self.timeout)
+            ioloop.remove_timeout(self.timeout)
             self.timeout = None
         self.callback = callback
         if timeout is not None:
-            self.timeout = tornado.ioloop.IOLoop.instance().add_timeout(
+            self.timeout = ioloop.add_timeout(
                 datetime.timedelta(seconds=timeout), self._timeout)
 
     def _timeout(self):
@@ -131,6 +204,10 @@ class GameMailbox(object):
         replies = dict(self.replies)
         replies['$timed_out'] = True
         callback(replies)
+    
+#
+# Object representing an active match
+#
 
 class Match(object):
     
@@ -145,7 +222,7 @@ class Match(object):
         self.game_mailbox = GameMailbox()
         self.player_mailbox = { player: PlayerMailbox() for player in self.players }
 
-        print json.dumps(['NEW', str(datetime.datetime.now()), match_id, game_key, player_keys, game_config])
+        log_new_match(match_id, game_key, player_keys, game_config)
 
     def dispatch(self, key, message, timeout, callback):
         if key == self.game:
@@ -202,11 +279,15 @@ class Match(object):
                 self.game_mailbox.send(player, message)
         self.player_mailbox[player].fetch(callback)
 
+#
+# Tornado handler for match messages
+#
+
 class MatchHandler(tornado.web.RequestHandler):
 
     @tornado.web.asynchronous
     def post(self, match_id):
-        timestamp = str(datetime.datetime.now())
+        timestamp = datetime.datetime.now()
 
         if match_id not in matches:
             raise tornado.web.HTTPError(404)
@@ -228,22 +309,27 @@ class MatchHandler(tornado.web.RequestHandler):
         except (InvalidRequest, MultipleRequest, KeyError, ValueError):
             raise tornado.web.HTTPError(400)
 
-        print json.dumps(['-->', timestamp, self._used_match_id, self._used_key, request])
+        log_recv(self._used_match_id, self._used_key, request, timestamp=timestamp)
 
     def on_response(self, data):
         self.set_header('content-type', 'application/json')
         self.write(json.dumps(data))
         self.finish()
-        print json.dumps(['<--', str(datetime.datetime.now()), self._used_match_id, self._used_key, data])
+        log_send(self._used_match_id, self._used_key, data)
+
+def random_bytes(count):
+    return os.urandom(count)
 
 def generate_key():
-    return base64.urlsafe_b64encode(os.urandom(6))
+    return base64.urlsafe_b64encode(random_bytes(9))
 
-def create_match(match_id, game_filename, agent_filenames, game_config={}):
+def generate_match_id():
+    return base64.urlsafe_b64encode(random_bytes(6))
+
+def create_match(match_id, game_filename, game_key, agent_filenames, agent_keys, game_config={}):
     sandboxes = {}
     agent_keys = []
-    match_url = 'http://localhost:4201/%s' % match_id
-    game_key = generate_key()
+    match_url = 'http://localhost:%d/%s' % (bound_port, match_id)
     game_agent = sandbox.SandboxedAgent(game_filename, match_id, game_key)
     sandboxes[game_key] = game_agent
     for agent_filename in agent_filenames:
@@ -262,20 +348,51 @@ routes = [
 def _create_test_matches():
 
     create_match(
-        generate_key(),
+        generate_match_id(),
         '../games/rock_paper_scissors.py',
-        ['../agents/rock_paper_scissors.py'] * 2
+        generate_key(),
+        ['../agents/rock_paper_scissors.py'] * 2,
+        [ generate_key(), generate_key() ]
     )
 
+def _scheduler_handler(future):
+    connection = future.result()
+
+    def log_loop(message):
+        connection.write_message(json.dumps(message))
+        _log_mailbox.fetch(callback=log_loop)
+    _log_mailbox.fetch(callback=log_loop)
+
+    def pull_loop(future):
+        message = future.result()
+        if message is None:
+            sys.stderr.write('scheduler connection terminated\n')
+            sys.exit()
+
+        message = json.loads(message)
+        if '$configure' in message:
+            print 'reconfiguring:'
+            for key in message['$configure']:
+                print '\t%s : %s' % (json.dumps(key), json.dumps(message['$configure'][key]))
+        if '$schedule' in message:
+            print 'scheduling match %s' % json.dumps(message['$schedule'])
+
+        connection.read_message(callback=pull_loop)
+    connection.read_message(callback=pull_loop)
+
+    log_init()
+
+def _connect_to_scheduler():
+    scheduler_url = sys.argv[1] if len(sys.argv) == 2 else 'ws://localhost:4200/match_server'
+    tornado.websocket.websocket_connect(scheduler_url, callback=_scheduler_handler)
+
+bound_port = None
+
 if __name__ == '__main__':
-    
-    print json.dumps(['INI', str(datetime.datetime.now())])
-
-#    tornado.ioloop.IOLoop.instance().add_timeout(0.1, _create_test_matches)
-
-    tester = tornado.ioloop.PeriodicCallback(_create_test_matches, 0.1)
-    tester.start()
-
+    sock, bound_port = tornado.testing.bind_unused_port()
+    ioloop.add_callback(_connect_to_scheduler)
     app = tornado.web.Application(routes)
-    app.listen(4201)
-    tornado.ioloop.IOLoop.instance().start()
+    server = tornado.httpserver.HTTPServer(app, io_loop=ioloop)
+    server.add_sockets([sock])
+    server.start()
+    ioloop.start()
