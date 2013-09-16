@@ -68,6 +68,7 @@ class GameBase(object):
         except ValueError:
             raise ValueError, '%d' % self._response.status_code
 
+x = """
 class GameStrategy(object):
 
     def __init__(self, config):
@@ -96,4 +97,4 @@ def run_game(url, match_id, game_strategy):
     send_message({'$activate':True})
 
     m = recv_message()
-
+"""
