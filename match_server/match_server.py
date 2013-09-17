@@ -321,13 +321,9 @@ def random_bytes(count):
     return os.urandom(count)
 
 def generate_key():
-    return base64.urlsafe_b64encode(random_bytes(9))
-
-def generate_match_id():
     return base64.urlsafe_b64encode(random_bytes(6))
 
 def create_match(match_id, game_filename, game_key, agent_filenames, agent_keys, game_config={}):
-    print 'create match ' + game_filename + ' ' + ' '.join(agent_filenames)
     sandboxes = {}
     agent_keys = []
     match_url = 'http://localhost:%d/%s' % (bound_port, match_id)
@@ -345,16 +341,6 @@ def create_match(match_id, game_filename, game_key, agent_filenames, agent_keys,
 routes = [
     (r'/([-_a-zA-Z0-9]+)', MatchHandler),
 ]
-
-def _create_test_matches():
-
-    create_match(
-        generate_match_id(),
-        '../games/rock_paper_scissors.py',
-        generate_key(),
-        ['../agents/rock_paper_scissors.py'] * 2,
-        [ generate_key(), generate_key() ]
-    )
 
 def _scheduler_handler(future):
     connection = future.result()
@@ -382,9 +368,9 @@ def _scheduler_handler(future):
             init = message['$schedule']
             create_match(
                 init['match_id'],
-                '../games/%s.py' % init['game'],
+                'games/%s' % init['game'],
                 generate_key(),
-                [ '../agents/%s/%s.py' % (init['game'], player) for player in init['players'] ],
+                [ 'agents/%s' % player for player in init['players'] ],
                 [ generate_key() for player in init['players'] ]
             )
 

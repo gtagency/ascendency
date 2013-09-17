@@ -94,6 +94,7 @@ class MatchTask(object):
         self.state = 'finished'
         self.worker.free()
         self.worker = None
+        self.archived = False
 
     def redo(self):
         self.logs = []
@@ -139,7 +140,8 @@ class MatchTask(object):
                 'match_id': self.match_id,
                 'game_key': self.game_key,
                 'player_keys' : self.player_keys,
-                'results' : self.results
+                'results' : self.results,
+                'archived' : self.archived
             }
 
 class MatchServer(object):
@@ -190,12 +192,14 @@ class MatchServer(object):
             del self.matches[match_id]
 
     def schedule_match(self, match, worker):
-        self.send({'$schedule':{
-            'match_id': match.match_id,
-            'game': match.game,
-            'players': match.players,
-            'config': match.config
-            }})
+        def send_schedule():
+            self.send({'$schedule':{
+                'match_id': match.match_id,
+                'game': match.game,
+                'players': match.players,
+                'config': match.config
+                }})
+        ioloop.add_callback(send_schedule)
         self.matches[match.match_id] = match
 
 games = {}
@@ -217,7 +221,7 @@ class MatchServerBackendHandler(tornado.websocket.WebSocketHandler):
 
     def on_close(self):
         self.match_server.on_close()
-        match_servers.remove(self.match_server)
+        del match_servers[self.match_server.hostname]
 
 class MatchServerIndexHandler(tornado.web.RequestHandler):
 
@@ -240,6 +244,40 @@ class MatchServerHandler(tornado.web.RequestHandler):
                 for worker in server.workers
             ],
         }))
+
+class GameIndexHandler(tornado.web.RequestHandler):
+    
+    def get(self):
+        self.set_header('content-type', 'application/json')
+        self.write(json.dumps(list(games.keys())))
+
+class GameHandler(tornado.web.RequestHandler):
+
+    def get(self, name):
+        try:
+            game = games[name]
+        except KeyError:
+            raise tornado.web.HTTPError(404)
+
+        self.set_header('content-type', 'application/octet-stream')
+        self.write(game)
+
+class AgentIndexHandler(tornado.web.RequestHandler):
+
+    def get(self):
+        self.set_header('content-type', 'application/json')
+        self.write(json.dumps(list(agents.keys())))
+
+class AgentHandler(tornado.web.RequestHandler):
+    
+    def get(self, name):
+        try:
+            agent = agents[name]
+        except KeyError:
+            raise tornado.web.HTTPError(404)
+
+        self.set_header('content-type', 'application/octet-stream')
+        self.write(agent)
 
 class MatchIndexHandler(tornado.web.RequestHandler):
     
@@ -289,7 +327,8 @@ class MatchLogHandler(tornado.web.RequestHandler):
             match = MatchTask.index[match_id]
         except KeyError:
             raise tornado.web.HTTPError(400)
-        self.write(json.dumps(sorted(match.logs, lambda l: l[1])))
+        self.set_header('content-type', 'application/json')
+        self.write(json.dumps(sorted(match.logs, key=lambda l: l[1])))
 
 routes = [
 
@@ -302,9 +341,9 @@ routes = [
 
     # game and agent collections
     (r'/games/', GameIndexHandler),
-    (r'/games/([-_a-zA-Z0-9.]+)', GameHandler),
-    (r'/agents/([-_a-zA-Z0-9.]+)/', AgentIndexHandler),
-    (r'/agents/([-_a-zA-Z0-9.]+)/([a-f0-9]+)', AgentHandler),
+    (r'/games/([-_a-zA-Z0-9]+)', GameHandler),
+    (r'/agents/', AgentIndexHandler),
+    (r'/agents/([-_a-zA-Z0-9]+)', AgentHandler),
 
     # match tracking
     (r'/matches/', MatchIndexHandler),
@@ -313,6 +352,10 @@ routes = [
 ]
 
 if __name__ == '__main__':
+
+    games['rock_paper_scissors'] = ''.join(open('../games/rock_paper_scissors.py'))
+    agents['random_choice'] = ''.join(open('../agents/random_choice.py'))
+
     app = tornado.web.Application(routes)
     app.listen(4200)
     ioloop.start()

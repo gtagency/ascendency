@@ -2,18 +2,24 @@
 import subprocess
 import threading
 import datetime
+import urllib
 import json
 import time
 import os
 
 import tornado.ioloop
 
+CACHE_DIR = '/var/tmp/agency-game/cache/'
+
 class SandboxedAgent(object):
 
     def __init__(self, filename, match_id, key):
-        self.filename = filename
+        self.filename = os.path.join(CACHE_DIR, filename)
         self.match_id = match_id
         self.key = key
+        if not os.path.isfile(self.filename):
+            urllib.urlretrieve('http://localhost:4200/%s' % filename, self.filename)
+            os.chmod(self.filename, 500)
 
     def start(self, args=[]):
         self._agent_process = subprocess.Popen(
