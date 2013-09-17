@@ -1,4 +1,4 @@
-angular.model('gameServices', ['ngResource']).
+angular.module('gameServices', ['ngResource']).
     factory('User', function($resource) {
         return $resource('users', {}, {
             // default Angular factory

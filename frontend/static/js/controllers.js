@@ -1,5 +1,4 @@
 function HomeCtrl($scope) {
-    console.log('test');
 }
 
 function MatchCtrl($scope, $routeParams) {

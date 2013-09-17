@@ -5,9 +5,9 @@ angular.module('game', ['gameServices']).config(['$routeProvider', function($rou
     // TODO: Agent page
     // TODO: Current matches
     // match page
-    $routeProvider.when('/matches/:matchId', {templateUrl: 'html/views/games.html', controller: MatchCtrl}).
-    when('/test', {templateUrl: 'html/views/home.html', controller: HomeCtrl}).
-    // home page
-    otherwise({templateUrl: '../html/views/home.html', controller: HomeCtrl});
+    $routeProvider
+    .when('/matches/:matchId', {templateUrl: 'views/games.html', controller: MatchCtrl})
+    .when('/test', {templateUrl: 'views/home.html', controller: HomeCtrl})
+    .otherwise({redirectTo: '/test'});
 
 }]);
