@@ -1,0 +1,27 @@
+<div class="container">
+    <h1>Agent List</h1>
+    <table class="table table-striped">
+        <tr>
+            <th>Rank</th>
+            <th>Name</th>
+            <th>Owner</th>
+            <th>Wins</th>
+            <th>Losses</th>
+            <th>Ties</th>
+        </tr>
+        <p>
+        <div class="input-group">
+            <span class="input-group-addon"><span class="glyphicon glyphicon-search"></span></span>
+            <input type="search" class="form-control" data-ng-model="q" placeholder="Filter agents">
+        </div>
+        </p>
+        <tr data-ng-repeat="agent in agents | filter: q">
+            <td>{{agent.rank}}</td>
+            <td>{{agent.name}}</td>
+            <td>{{agent.owner}}</td>
+            <td>{{agent.wins}}</td>
+            <td>{{agent.losses}}</td>
+            <td>{{agent.ties}}</td>
+        </tr>
+    </table>
+</div>

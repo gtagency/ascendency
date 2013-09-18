@@ -1,0 +1,21 @@
+<div class="container">
+    <h1>Match List</h1>
+    <table class="table table-striped">
+        <tr>
+            <th>Agent 1</th>
+            <th>Agent 2</th>
+            <th>Winner</th>
+        </tr>
+        <p>
+        <div class="input-group">
+            <span class="input-group-addon"><span class="glyphicon glyphicon-search"></span></span>
+            <input type="search" class="form-control" data-ng-model="q" placeholder="Filter matches">
+        </div>
+        </p>
+        <tr data-ng-repeat="match in matches | filter: q">
+            <td>{{match.agents[0]}}</td>
+            <td>{{match.agents[1]}}</td>
+            <td>Not implemented</td>
+        </tr>
+    </table>
+</div>

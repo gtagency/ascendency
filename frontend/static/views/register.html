@@ -1,0 +1,22 @@
+<div class="container">
+    <h1>Register for Ascendency</h1>
+    <form role="form">
+        <div class="form-group">
+            <label for="email">Email Address</label>
+            <input type="email" data-ng-model="input.email" id="email" class="form-control" placeholder="Enter a valid email">
+        </div>
+        <div class="form-group">
+            <label for="username">Username</label>
+            <input type="text" data-ng-model="input.username" id="username" class="form-control" placeholder="Enter desired username">
+        </div>
+        <div class="form-group">
+            <label for="password">Password</label>
+            <input type="text" data-ng-model="input.password" id="password" class="form-control" placeholder="Enter a secure password">
+        </div>
+        <div class="form-group">
+            <label for="confirm">Confirm Password</label>
+            <input type="text" data-ng-model="input.confirm" id="confirm" class="form-control" placeholder="Re-type your password">
+        </div>
+        <button type="submit" data-ng-click="register()" class="btn btn-primary">Register</button>
+    </form>
+</div>

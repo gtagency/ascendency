@@ -1,13 +1,16 @@
-angular.module('game', ['gameServices']).config(['$routeProvider', function($routeProvider) {
+angular.module('game', ['gameServices', 'ui.bootstrap']).config(['$routeProvider', function($routeProvider) {
     // TODO: user page
-    // TODO: login page
-    // TODO: register page
     // TODO: Agent page
-    // TODO: Current matches
+    // TODO: View match
     // match page
     $routeProvider
-    .when('/matches/:matchId', {templateUrl: 'views/games.html', controller: MatchCtrl})
-    .when('/test', {templateUrl: 'views/home.html', controller: HomeCtrl})
-    .otherwise({redirectTo: '/test'});
+    .when('/agents/:filter', {templateUrl: 'views/agentlist.html', controller: AgentListCtrl})
+    .when('/agent/:agentId', {templateUrl: 'views/agent.html', controller: AgentCtrl})
+    .when('/matches/:filter', {templateUrl: 'views/matchlist.html', controller: MatchListCtrl})
+    .when('/match/:matchId', {templateUrl: 'views/match.html', controller: MatchCtrl})
+    .when('/user/login', {templateUrl: 'views/login.html', controller: UserCtrl})
+    .when('/user/register', {templateUrl: 'views/register.html', controller: UserCtrl})
+    // FIXME: this should probably be replaced with a 404 page or something
+    .otherwise({templateUrl: 'views/home.html', controller: HomeCtrl});
 
 }]);

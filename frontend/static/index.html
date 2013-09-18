@@ -17,8 +17,50 @@
     </head>
 
     <body>
-        <div class="navbar navbar-default">
-            <a href="#" class="navbar-brand">Ascendency</a>
+        <div class="navbar navbar-default" data-ng-controller="NavCtrl">
+            <div class="navbar-header">
+                <button type="button" class="navbar-toggle" data-toggle="collapse" data-target=".navbar-ex1-collapse">
+                    <span class="sr-only">Toggle navigation</span>
+                    <span class="icon-bar"></span>
+                    <span class="icon-bar"></span>
+                    <span class="icon-bar"></span>
+                </button>
+                <a href="#" class="navbar-brand">Ascendency</a>
+            </div>
+
+            <div class="collapse navbar-collapse navbar-ex1-collapse">
+                <ul class="nav navbar-nav">
+                    <li><a href="#">Home</a><li>
+                    <li><a href="#" class="dropdown-toggle" data-toggle="dropdown">Matches <span class="caret"></span></a>
+                        <ul class="dropdown-menu">
+                            <li><a href="#/matches/current">Current Matches</a></li>
+                            <li><a href="#/matches/all">All Matches</a></li>
+                        </ul>
+                    </li>
+                    <li><a href="#" class="dropdown-toggle" data-toggle="dropdown">Agents <span class="caret"></span></a>
+                        <ul class="dropdown-menu">
+                            <li><a href="#/agents/all">Top Agents</a></li>
+                            <li><a href="#/agents/user">Your Agents</a></li>
+                        </ul>
+                    </li>
+                </ul>
+                <ul class="nav navbar-nav navbar-right" data-ng-controller="UserCtrl">
+                    <li data-ng-hide="user">
+                        <button type="button" class="btn btn-default navbar-btn" data-ng-click="navigate('/user/login')">
+                            <span class="glyphicon glyphicon-user"></span>
+                            Login
+                        </button>
+                    </li>
+                    <li data-ng-hide="user"><a href="#/user/register">Register</a></li>
+                    <li class="navbar-text" data-ng-show="user">{{user.username}}</li>
+                    <li data-ng-show="user">
+                        <button type="button" class="btn btn-default navbar-btn" data-ng-click="logout()">
+                            <span class="glyphicon glyphicon-user"></span>
+                            Logout
+                        </button>
+                    </li>
+                </ul>
+            </div>
         </div>
     
         <section data-ng-view="">
