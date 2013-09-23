@@ -1,0 +1,47 @@
+<div class="container">
+    <h1>{{agent.name}}</h1>
+    <div class="panel panel-default">
+        <div class="panel-heading">
+            Agent Statistics
+        </div>
+        <table class="table">
+            <tr>
+                <th>Rank</th>
+                <td>{{agent.rank}}</td>
+            </tr>
+            <tr>
+                <th>Wins</th>
+                <td>{{agent.wins}}</td>
+            </tr>
+            <tr>
+                <th>Losses</th>
+                <td>{{agent.losses}}</td>
+            </tr>
+            <tr>
+                <th>Ties</th>
+                <td>{{agent.ties}}</td>
+            </tr>
+        </table>
+    </div>
+    <div class="panel panel-default">
+        <div class="panel-heading">
+            Agent Owner
+        </div>
+        <div class="panel-body">
+            <p>
+                {{agent.owner}}
+            </p>
+        </div>
+    </div>
+    <div class="panel panel-default">
+        <div class="panel-heading">
+            Matches Played
+        </div>
+        <ul class="list-group">
+            <li class="list-group-item" data-ng-repeat="match in agent.matches">
+                <a data-ng-href="#/match/{{match.id}}">{{match.id}}</a>
+                <span data-ng-show="match.complete && match.winner == agent.id" class="badge">Win</span>
+                <span data-ng-show="match.complete && match.winner != agent.id" class="badge">Loss</span>
+            </li>
+        </ul>
+</div>

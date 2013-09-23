@@ -7,6 +7,12 @@ angular.module('gameServices', ['ngResource']).
         return $resource('matches/:matchId', {}, {
             // default Angular factory
         });
+    }).factory('Agent', function($resource) {
+        return $resource('agents/:agentId', {}, {
+            // default Angular factory
+        });
+    }).factory('User', function($resource) {
+        return $resource('users/:userId', {}, {
+            // default Angular factory
+        });
     });
-    // TODO: User factory
-    // TODO: Agent factory

@@ -53,32 +53,68 @@ function UserCtrl($scope, User) {
 
 };
 
-function MatchListCtrl($scope, $routeParams){
+function MatchListCtrl($scope, $routeParams, Match){
     
-    // test data - this controller is not complete
+    var data = {
+        filter : $routeParams.filter
+    }
+    $scope.matches = Match.query(data);
     
+    
+    // test data
     $scope.matches = [
         {id: 123,
-        'agents': ['aoe','qjk'],
-        'complete': false
+        agents: ['aoe','qjk'],
+        complete: false,
+        logs : 'random text'
         },
-        {id: 321,
-        'agents': ['stth', 'cgr'],
-        'complete': true
+        {id: 234,
+        agents: ['aoe', 'tns'],
+        complete: true,
+        winner: 'tns',
+        logs : 'weee'
         }
     ];
     if($routeParams.filter == 'current') {
         $scope.matches = [
             {id: 123,
-            'agents': ['aoe', 'qjk'],
-            'complete': false
+            agents: ['aoe', 'qjk'],
+            complete: false,
+            logs : 'random text'
             }
         ];
     }
 
 };
 
-function MatchCtrl($scope) {
+function MatchCtrl($scope, $routeParams, Match) {
+
+    // FIXME: What if $routeParams.matchId is empty?
+    $scope.match = Match.get({matchId: $routeParams.matchId});
+
+    // test data
+    $scope.match = {
+        id: 123,
+        agents: ['aoe','qjk'],
+        complete: false, 
+        logs : 'random text'
+    }
+
+    var cxn = new WebSocket('ws://game.gtagency.org/logs/'+$scope.match.id, ['soap']);
+    
+    connection.onopen = function() {
+        // do nothing
+    }
+
+    connection.onerror = function(error) {
+        // do nothing
+    }
+
+    // recieve logs from the server
+    cxn.onmessage = function(e) {
+        $scope.logs.append(e.data);
+    }
+
 };
 
 function AgentListCtrl($scope, $routeParams) {
@@ -86,17 +122,61 @@ function AgentListCtrl($scope, $routeParams) {
     $scope.agents = [];
     if($routeParams.filter == 'all') {
         $scope.agents = [
-            {id: 231,
-            rank: 1,
-            name: 'winner',
-            owner: 'test_user',
-            wins: 3,
-            losses: 3,
-            ties: 0}
+            {
+                id: 'aoe',
+                rank: 1,
+                name: 'Botty',
+                owner: 'test_user',
+                wins: 3,
+                losses: 3,
+                ties: 0,
+                matches: [
+                    {
+                        id: 123,
+                        agents: ['aoe', 'qjk'],
+                        complete: false,
+                        logs : 'random text'
+                    },
+                    {
+                        id: 234,
+                        agents: ['aoe', 'tns'],
+                        complete: true,
+                        winner: 'aoe',
+                        logs : 'weee'
+                    }
+                ]
+            }
         ];
     }
 };
 
-function AgentCtrl($scope) {
+function AgentCtrl($scope, $routeParams, Agent) {
+
+    // FIXME: What if $routeParams.agentId is empty?
+    $scope.agent = Agent.get({agentId: $routeParams.agentId});
+
+    // test data
+    $scope.agent = {
+        id: 'aoe',
+        rank: 1,
+        name: 'Botty',
+        owner: 'test_user',
+        wins: 3,
+        losses: 3,
+        ties: 0,
+        matches: [
+            {
+                id: 123,
+                agents: ['aoe', 'qjk'],
+                complete: false,
+            },
+            {
+                id: 234,
+                agents: ['aoe', 'tns'],
+                complete: true,
+                winner: 'aoe'
+            }
+        ]
+    };
 
 };

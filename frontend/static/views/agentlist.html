@@ -17,7 +17,7 @@
         </p>
         <tr data-ng-repeat="agent in agents | filter: q">
             <td>{{agent.rank}}</td>
-            <td>{{agent.name}}</td>
+            <td><a data-ng-href="#/agent/{{agent.id}}">{{agent.name}}</a></td>
             <td>{{agent.owner}}</td>
             <td>{{agent.wins}}</td>
             <td>{{agent.losses}}</td>
